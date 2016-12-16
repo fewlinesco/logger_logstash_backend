@@ -72,12 +72,13 @@ defmodule LoggerLogstashBackend do
     opts = Keyword.merge env, opts
     Application.put_env :logger, name, opts
 
-    level = Keyword.get opts, :level, :debug
-    metadata = Keyword.get opts, :metadata, []
-    type = Keyword.get opts, :type, "elixir"
-    host = Keyword.get opts, :host
-    port = Keyword.get opts, :port
+    level = fetch_configuration_value(opts, :level, :debug)
+    metadata = fetch_configuration_value(opts, :metadata, [])
+    type = fetch_configuration_value(opts, :type, "elixir")
+    host = fetch_configuration_value(opts, :host)
+    port = to_i!(fetch_configuration_value(opts, :port), "port has to be an integer")
     {:ok, socket} = :gen_udp.open 0
+
     %{
       name: name,
       host: to_char_list(host),
@@ -89,6 +90,19 @@ defmodule LoggerLogstashBackend do
     }
   end
 
+  defp fetch_configuration_value(opts, name, default) do
+    fetch_configuration_value(opts, name) || default
+  end
+
+  defp fetch_configuration_value(opts ,name) do
+    case Keyword.get(opts, name) do
+      {:system, name} ->
+        System.get_env(name)
+      value ->
+        value
+    end
+  end
+
   # inspects the argument only if it is a pid
   defp inspect_pid(pid) when is_pid(pid), do: inspect(pid)
   defp inspect_pid(other), do: other
@@ -97,6 +111,15 @@ defmodule LoggerLogstashBackend do
   defp inspect_pids(fields) when is_map(fields) do
     Enum.into fields, %{}, fn {key, value} ->
       {key, inspect_pid(value)}
+    end
+  end
+
+  defp to_i!(value, error_message) do
+    case Integer.parse(value) do
+      :error ->
+        raise error_message
+      {int, _rest} ->
+        int
     end
   end
 end
